@@ -1,59 +1,37 @@
-import logging
 import os
-import requests
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+import asyncio
+import aiohttp
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_URL = "https://api.freefire-api.com/v1/ff-account-info"
+FF_API_KEY = os.getenv("FF_API_KEY")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🔥 FF Stats Bot is online 24/7!\n\n"
-        "Send: /ff UID\n"
-        "Example: /ff 811094988"
-    )
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
 
-async def ff_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("Usage: /ff UID\nExample: /ff 811094988")
+@dp.message(Command("start"))
+async def start_cmd(message: types.Message):
+    await message.answer("Bot is running! Use /rank <player_id>")
+
+@dp.message(Command("rank"))
+async def rank_cmd(message: types.Message):
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("Usage: /rank <player_id>")
         return
-
-    uid = context.args[0]
-    await update.message.reply_text(f"⏳ Fetching stats for UID: {uid}...")
-
-    try:
-        response = requests.get(f"{API_URL}?uid={uid}", timeout=15)
-        data = response.json()
-
-        if response.status_code == 200 and data.get('basic'):
-            basic = data['basic']
-            nickname = basic.get('nickname', 'N/A')
-            level = basic.get('level', 'N/A')
-            br_rank = basic.get('rank', 'N/A')
-
-            msg = f"**FF Stats for UID {uid}**\n\n"
-            msg += f"**Nickname:** `{nickname}`\n"
-            msg += f"**Level:** `{level}`\n"
-            msg += f"**BR Rank:** `{br_rank}`"
-
-            await update.message.reply_text(msg, parse_mode='Markdown')
-        else:
-            await update.message.reply_text(f"❌ No data found for UID: {uid}")
-
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await update.message.reply_text("❌ API error. Try again later.")
-
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("ff", ff_stats))
-    logger.info("Bot running 24/7 on Render...")
-    app.run_polling()
+    player_id = args[1]
+    url = f"https://freefire-api.p.rapidapi.com/player/{player_id}"
+    headers = {"X-RapidAPI-Key": FF_API_KEY, "X-RapidAPI-Host": "freefire-api.p.rapidapi.com"}
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                rank = data.get("rank", "Not found")
+                name = data.get("nickname", "Unknown")
+                await message.answer(f"Player: {name}\nRank: {rank}")
+            else:
+                await message.answer("Player not found or API error")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(dp.start_polling(bot))
