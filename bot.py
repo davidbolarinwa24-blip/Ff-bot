@@ -1,4 +1,4 @@
-print("Årmstrøñg Bot v2.2 VALIDATION ACTIVE")
+print("Årmstrøñg Bot v2.4 VALIDATION ACTIVE")
 
 import telebot
 import requests
@@ -8,11 +8,20 @@ from datetime import datetime
 import os
 import time
 
-API_TOKEN = 'PASTE_NEW_TOKEN_HERE'
+API_TOKEN = '8303316737:AAGptofHkHLlhvx6Q-18WSsx9fyoWVOx-Xs'
 bot = telebot.TeleBot(API_TOKEN)
 
+bot.set_my_commands([
+    telebot.types.BotCommand("start", "Open main menu"),
+    telebot.types.BotCommand("ping", "Check bot speed"),
+    telebot.types.BotCommand("spin", "Daily bonus spin"),
+    telebot.types.BotCommand("balance", "Check bonus likes"),
+    telebot.types.BotCommand("help", "Contact admin"),
+    telebot.types.BotCommand("cancel", "Cancel process")
+])
+
 DATA_FILE = 'users.json'
-user_state = {} # stores what step user is on
+user_state = {}
 valid_regions = ['ind', 'bd', 'pk', 'br', 'us', 'sg', 'id', 'th', 'vn', 'me', 'ng']
 
 def load_data():
@@ -29,7 +38,6 @@ def get_today():
     return datetime.now().strftime('%Y-%m-%d')
 
 def get_weighted_bonus():
-    # 80% chance for 1-10, 20% chance for 11-50
     if random.random() < 0.8:
         return random.randint(1, 10)
     else:
@@ -63,6 +71,16 @@ def send_likes_btn(message):
         reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home')
     )
 
+@bot.message_handler(func=lambda m: m.text == '🔍 Scan Info')
+def scan_info_btn(message):
+    user_state[message.from_user.id] = 'scanning_uid'
+    bot.send_message(message.chat.id, 
+        "🔍 PROFILE SCANNER\n"
+        "─────────────────\n"
+        "Please type the UID you want to scan in the chat:",
+        reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home')
+    )
+
 @bot.message_handler(func=lambda m: m.text == '⬅️ Back to Home')
 def back_home(message):
     user_state.pop(message.from_user.id, None)
@@ -72,8 +90,7 @@ def back_home(message):
 def get_uid(message):
     try:
         uid = int(message.text)
-        if uid <= 0:
-            raise ValueError
+        if uid <= 0: raise ValueError
         user_state[message.from_user.id] = {'step': 'waiting_amount', 'uid': uid}
         bot.send_message(message.chat.id,
             f"🎯 Target Locked: {uid}\n\n"
@@ -82,6 +99,75 @@ def get_uid(message):
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
+@bot.message_handler(func=lambda m: user_state.get(m.from_user.id) == 'scanning_uid')
+def scan_uid(message):
+    try:
+        uid = int(message.text)
+        if uid <= 0: raise ValueError
+    except:
+        bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
+        return
+
+    user_state.pop(message.from_user.id, None)
+    loading_msg = bot.send_message(message.chat.id, "🔍 Scanning profile...")
+
+    region = 'me'
+    api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
+
+    try:
+        response = requests.get(api_url, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        basic = data.get("basicInfo", {})
+        guild = data.get("guildInfo", {})
+        ranking = data.get("rankingInfo", {})
+        pet = data.get("petInfo", {})
+        credit = data.get("creditScoreInfo", {})
+
+        template = (
+            f"🔍 **PROFILE SCANNER**\n\n"
+            f"🛡️ **Account Status**\n"
+            f"Status: 🟢 ACTIVE\n"
+            f"Region: ME\n"
+            f"Last Login: {basic.get('lastLogin', 'N/A')}\n\n"
+            f"👤 **Basic Information**\n"
+            f"Nickname: {basic.get('nickname', 'N/A')}\n"
+            f"Level: {basic.get('level', 'N/A')}\n"
+            f"Rank: {basic.get('rank', 'N/A')}\n"
+            f"Max Rank: {basic.get('maxRank', 'N/A')}\n"
+            f"Experience: {basic.get('exp', 'N/A')}\n"
+            f"Liked: {basic.get('liked', 'N/A')}\n"
+            f"Account ID: {uid}\n"
+            f"Account Created: {basic.get('createdAt', 'N/A')}\n"
+            f"Account Type: Regular\n"
+            f"🏆 **Guild Information**\n"
+            f"Guild Name: {guild.get('name', 'None')}\n"
+            f"Guild Level: {guild.get('level', 'N/A')}\n"
+            f"Guild ID: {guild.get('id', 'N/A')}\n"
+            f"Members: {guild.get('members', '0/40')}\n\n"
+            f"🏅 **Ranking Information**\n"
+            f"BR Rank: {ranking.get('brRank', 'N/A')}\n"
+            f"BR Points: {ranking.get('brPoints', 'N/A')}\n"
+            f"CS Rank: {ranking.get('csRank', 'N/A')}\n"
+            f"CS Points: {ranking.get('csPoints', 'N/A')}\n\n"
+            f"⭐ **Pet Information**\n"
+            f"Pet Name: {pet.get('name', 'None')}\n"
+            f"Pet Level: {pet.get('level', 'N/A')}\n"
+            f"Pet Experience: {pet.get('exp', 'N/A')}\n\n"
+            f"💳 **Credit Score**\n"
+            f"Credit Score: {credit.get('score', '100')}"
+        )
+
+        bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
+        bot.send_message(message.chat.id, template,
+            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'), parse_mode='Markdown')
+
+    except Exception as e:
+        bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
+        bot.send_message(message.chat.id, f"❌ Scan Failed: {str(e)}",
+            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'))
+
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id, {}).get('step') == 'waiting_amount')
 def get_amount(message):
     data = user_state[message.from_user.id]
@@ -89,17 +175,13 @@ def get_amount(message):
     
     try:
         amount = int(message.text)
-        if amount < 0:
-            raise ValueError
-        if amount == 0:
-            amount = 1000 # MAX likes
+        if amount < 0: raise ValueError
+        if amount == 0: amount = 1000
     except:
         bot.send_message(message.chat.id, "❌ Invalid amount. Send numbers only.")
         return
 
     user_state.pop(message.from_user.id, None)
-    
-    # Send processing msg first, then delete + send new one
     loading_msg = bot.send_message(message.chat.id, "⏳ Processing your request...")
 
     region = 'me'
@@ -118,8 +200,8 @@ def get_amount(message):
         level = basic_info.get("level", '52')
 
         template = (
-            f"Årmstrõng Bot v2.2 🍀\n\n"
-            f"Player: #Årmstrõng#\n"
+            f"Årmstrõng Bot v2.4 🍀\n\n"
+            f"Player: #{name}#\n"
             f"UID: {uid}\n"
             f"Level: {level}\n\n"
             f"Likes Before: {likes_before}\n"
@@ -128,7 +210,6 @@ def get_amount(message):
             f"Status: ✅ Success"
         )
 
-        # DELETE loading msg, send fresh result like AUT bot
         bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
         bot.send_message(message.chat.id, template,
             reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'))
@@ -170,9 +251,7 @@ def spin_wheel(message):
         return
 
     bonus = get_weighted_bonus()
-
-    if user_id not in data:
-        data[user_id] = {}
+    if user_id not in data: data[user_id] = {}
 
     data[user_id]['spin_date'] = today
     data[user_id]['bonus_likes'] = data[user_id].get('bonus_likes', 0) + bonus
@@ -180,11 +259,9 @@ def spin_wheel(message):
 
     wheel = ["🎰", "🎲", "🎯", "🍀", "⭐", "💎", "🔒"]
     spin_msg = bot.send_message(message.chat.id, f"{random.choice(wheel)} Spinning daily wheel...")
-
     time.sleep(2)
 
     rarity = "🔓 COMMON" if bonus <= 10 else "🔒 RARE/LOCKED"
-
     bot.edit_message_text(
         f"{random.choice(wheel)} **SPIN WHEEL RESULT!** {random.choice(wheel)}\n\n"
         f"🎉 You won: **{bonus} Bonus Likes!**\n"
@@ -204,5 +281,5 @@ def cancel(message):
     bot.send_message(message.chat.id, "❌ Cancelled Background Process 🔴", reply_markup=telebot.types.ReplyKeyboardRemove())
     start(message)
 
-print("Årmstrøñg Bot v2.2 is now online...")
+print("Årmstrøñg Bot v2.4 is now online...")
 bot.infinity_polling()
