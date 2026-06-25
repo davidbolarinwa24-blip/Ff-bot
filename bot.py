@@ -1,4 +1,4 @@
-print("Årmstrøñg Bot v2.4 VALIDATION ACTIVE")
+print("Årmstrøñg Bot v2.5 VALIDATION ACTIVE")
 
 import telebot
 import requests
@@ -22,7 +22,7 @@ bot.set_my_commands([
 
 DATA_FILE = 'users.json'
 user_state = {}
-valid_regions = ['ind', 'bd', 'pk', 'br', 'us', 'sg', 'id', 'th', 'vn', 'me', 'ng']
+valid_regions = {'BD': 'bd', 'IND': 'ind', 'ME': 'me', 'PK': 'pk', 'US': 'us', 'SG': 'sg', 'ID': 'id', 'TH': 'th', 'VN': 'vn', 'BR': 'br'}
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -91,27 +91,65 @@ def get_uid(message):
     try:
         uid = int(message.text)
         if uid <= 0: raise ValueError
-        user_state[message.from_user.id] = {'step': 'waiting_amount', 'uid': uid}
+        user_state[message.from_user.id] = {'step': 'waiting_region', 'uid': uid, 'type': 'likes'}
+        
+        # Region selection buttons
+        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        markup.row('BD', 'IND', 'ME')
+        markup.row('PK', 'US', 'SG')
+        markup.row('⬅️ Back to Home')
+        
         bot.send_message(message.chat.id,
             f"🎯 Target Locked: {uid}\n\n"
-            f"How many likes do you want to send? (Type a number, or type 0 for MAX)"
+            f"Select server region:",
+            reply_markup=markup
         )
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id) == 'scanning_uid')
-def scan_uid(message):
+def scan_uid_step(message):
     try:
         uid = int(message.text)
         if uid <= 0: raise ValueError
+        user_state[message.from_user.id] = {'step': 'waiting_region', 'uid': uid, 'type': 'scan'}
+        
+        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        markup.row('BD', 'IND', 'ME')
+        markup.row('PK', 'US', 'SG')
+        markup.row('⬅️ Back to Home')
+        
+        bot.send_message(message.chat.id,
+            f"🔍 UID: {uid}\n\n"
+            f"Select server region to scan:",
+            reply_markup=markup
+        )
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
+
+@bot.message_handler(func=lambda m: user_state.get(m.from_user.id, {}).get('step') == 'waiting_region')
+def get_region(message):
+    if message.text not in valid_regions:
+        bot.send_message(message.chat.id, "❌ Invalid region. Choose BD/IND/ME/PK/US/SG/ID/TH/VN/BR")
         return
+    
+    data = user_state[message.from_user.id]
+    uid = data['uid']
+    region = valid_regions[message.text]
+    
+    if data['type'] == 'scan':
+        user_state.pop(message.from_user.id, None)
+        scan_profile(message.chat.id, uid, region)
+    else:
+        user_state[message.from_user.id] = {'step': 'waiting_amount', 'uid': uid, 'region': region}
+        bot.send_message(message.chat.id,
+            f"🌍 Region: {message.text}\n\n"
+            f"How many likes do you want to send? (Type a number, or type 0 for MAX)",
+            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home')
+        )
 
-    user_state.pop(message.from_user.id, None)
-    loading_msg = bot.send_message(message.chat.id, "🔍 Scanning profile...")
-
-    region = 'me'
+def scan_profile(chat_id, uid, region):
+    loading_msg = bot.send_message(chat_id, "🔍 Scanning profile...")
     api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
 
     try:
@@ -126,10 +164,10 @@ def scan_uid(message):
         credit = data.get("creditScoreInfo", {})
 
         template = (
-            f"🔍 **PROFILE SCANNER**\n\n"
+            f"🔍 **PROFILE SCANNER** [{region.upper()}]\n\n"
             f"🛡️ **Account Status**\n"
             f"Status: 🟢 ACTIVE\n"
-            f"Region: ME\n"
+            f"Region: {region.upper()}\n"
             f"Last Login: {basic.get('lastLogin', 'N/A')}\n\n"
             f"👤 **Basic Information**\n"
             f"Nickname: {basic.get('nickname', 'N/A')}\n"
@@ -139,8 +177,7 @@ def scan_uid(message):
             f"Experience: {basic.get('exp', 'N/A')}\n"
             f"Liked: {basic.get('liked', 'N/A')}\n"
             f"Account ID: {uid}\n"
-            f"Account Created: {basic.get('createdAt', 'N/A')}\n"
-            f"Account Type: Regular\n"
+            f"Account Created: {basic.get('createdAt', 'N/A')}\n\n"
             f"🏆 **Guild Information**\n"
             f"Guild Name: {guild.get('name', 'None')}\n"
             f"Guild Level: {guild.get('level', 'N/A')}\n"
@@ -159,19 +196,26 @@ def scan_uid(message):
             f"Credit Score: {credit.get('score', '100')}"
         )
 
-        bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
-        bot.send_message(message.chat.id, template,
+        bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
+        bot.send_message(chat_id, template,
             reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'), parse_mode='Markdown')
 
     except Exception as e:
-        bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
-        bot.send_message(message.chat.id, f"❌ Scan Failed: {str(e)}",
+        bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
+        bot.send_message(chat_id, 
+            f"❌ Scan Failed\n"
+            f"🔧 Possible reasons:\n"
+            f"1. API server down\n"
+            f"2. Wrong region - try BD/IND\n"
+            f"3. UID not found\n"
+            f"Try another region",
             reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'))
 
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id, {}).get('step') == 'waiting_amount')
 def get_amount(message):
     data = user_state[message.from_user.id]
     uid = data['uid']
+    region = data['region']
     
     try:
         amount = int(message.text)
@@ -184,7 +228,6 @@ def get_amount(message):
     user_state.pop(message.from_user.id, None)
     loading_msg = bot.send_message(message.chat.id, "⏳ Processing your request...")
 
-    region = 'me'
     api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
 
     try:
@@ -200,10 +243,11 @@ def get_amount(message):
         level = basic_info.get("level", '52')
 
         template = (
-            f"Årmstrõng Bot v2.4 🍀\n\n"
+            f"Årmstrõng Bot v2.5 🍀\n\n"
             f"Player: #{name}#\n"
             f"UID: {uid}\n"
-            f"Level: {level}\n\n"
+            f"Level: {level}\n"
+            f"Region: {region.upper()}\n\n"
             f"Likes Before: {likes_before}\n"
             f"Likes After: {new_likes}\n"
             f"Likes Given: {likes_given}\n\n"
@@ -216,7 +260,13 @@ def get_amount(message):
 
     except Exception as e:
         bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
-        bot.send_message(message.chat.id, f"❌ Error: {str(e)}",
+        bot.send_message(message.chat.id, 
+            "❌ API Error: Server is down\n"
+            "🔧 Possible reasons:\n"
+            "1. API limit reached\n"
+            "2. Wrong region - try BD/IND server\n"
+            "3. UID blocked\n"
+            "Try again later or contact admin",
             reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'))
 
 @bot.message_handler(commands=['ping'])
@@ -281,5 +331,5 @@ def cancel(message):
     bot.send_message(message.chat.id, "❌ Cancelled Background Process 🔴", reply_markup=telebot.types.ReplyKeyboardRemove())
     start(message)
 
-print("Årmstrøñg Bot v2.4 is now online...")
+print("Årmstrøñg Bot v2.5 is now online...")
 bot.infinity_polling()
