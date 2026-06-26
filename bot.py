@@ -10,20 +10,18 @@ START_PHOTO_ID = 'AgACAgQAAxkBAAIBFGo-ureHxrSmHPvpyvfhXS8aMC4GAAKSDmsbsAAB-VF47I
 
 bot = telebot.TeleBot(API_TOKEN)
 user_state = {}
-user_likes = {} # Store user likes/balance
+user_likes = {}
 
 valid_regions = {'BD': 'bd', 'IND': 'ind', 'ME': 'me', 'PK': 'pk', 'US': 'us', 'SG': 'sg', 'ID': 'id', 'TH': 'th', 'VN': 'vn', 'BR': 'br'}
 
-# ===== START - AUT HOT STYLE: PHOTO + 8 FRAME BUTTONS + PERSONAL GREETING =====
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = message.from_user.id
-    first_name = message.from_user.first_name # Gets user's Telegram name
+    first_name = message.from_user.first_name
 
     if user_id not in user_likes:
         user_likes[user_id] = 0
 
-    # AUT style inline frame - 8 buttons like screenshot
     inline_markup = InlineKeyboardMarkup(row_width=2)
     inline_markup.add(
         InlineKeyboardButton("❤️ Send Likes", callback_data="send_likes"),
@@ -45,7 +43,6 @@ def start(message):
         InlineKeyboardButton("⚙️ Settings", callback_data="settings")
     )
 
-    # FIXED GREETING: Wavy hand + personalized name + balance/levelup/options
     caption = (
         f"👋 | Hi {first_name}, nice to see you!\n"
         f"👍 | Balance: {user_likes[user_id]}\n"
@@ -59,12 +56,11 @@ def start(message):
     else:
         bot.send_message(message.chat.id, caption, reply_markup=inline_markup)
 
-    # Purple Menu button like AUT bottom keyboard
     menu_markup = ReplyKeyboardMarkup(resize_keyboard=True)
     menu_markup.row('☰ Menu')
     bot.send_message(message.chat.id, "Menu", reply_markup=menu_markup)
 
-# ===== HANDLE ALL BUTTON CLICKS =====
+# ===== SINGLE CALLBACK HANDLER =====
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
     bot.answer_callback_query(call.id)
@@ -79,8 +75,8 @@ def callback(call):
         bot.send_message(call.message.chat.id, "🔍 PROFILE SCANNER\n─────────────────\nPlease type the UID:")
 
     elif call.data == "spin":
-        # Daily Spin gives LIKES 1-15, max 15
-        spin_likes = random.randint(1, 15)
+        # DAILY SPIN: MIN 5, MAX 20 LIKES ✅
+        spin_likes = random.randint(5, 20)
         user_likes[user_id] = user_likes.get(user_id, 0) + spin_likes
         bot.send_message(call.message.chat.id, f"🎁 Daily Spin: You got {spin_likes} likes! New balance: {user_likes[user_id]}")
 
@@ -97,7 +93,60 @@ def callback(call):
     elif call.data == "settings":
         bot.send_message(call.message.chat.id, "⚙️ Settings panel coming soon...")
 
-# ===== FILE_ID GRABBER =====
+    # REGION HANDLER - FIXED
+    elif call.data.startswith('region_'):
+        region_code = call.data.split('_')[1]
+
+        if region_code not in valid_regions:
+            bot.send_message(call.message.chat.id, f"❌ Invalid region: {region_code}")
+            return
+
+        region = valid_regions[region_code]
+
+        if user_id not in user_state or 'uid' not in user_state[user_id]:
+            bot.send_message(call.message.chat.id, "❌ UID not found. Click Send Likes again.")
+            return
+
+        uid = user_state[user_id]['uid']
+        user_state.pop(user_id, None)
+
+        sent_msg = bot.send_message(call.message.chat.id, "⏳ Processing...")
+        api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
+
+        try:
+            response = requests.get(api_url, timeout=15)
+            data = response.json()
+
+            name = data.get('PlayerNickname', 'N/A')
+            likes_before = data.get('LikesbeforeCommand', '0')
+            likes_given = data.get('LikesGivenByAPI', '0')
+            likes_after = data.get('LikesafterCommand', '0')
+            remaining = data.get('remains', 'N/A')
+
+            likes_given_int = int(likes_given) if str(likes_given).isdigit() else 0
+            user_likes[user_id] = user_likes.get(user_id, 0) + likes_given_int
+
+            template = (
+                "════════\n"
+                " 🎉 LIKE SUCCESSFULLY 👍 \n"
+                "════════\n\n"
+                f"👑 Name: {name}\n"
+                f"🆔 UID: {uid}\n"
+                f"🌐 Region: {region.upper()}\n"
+                "────────────────────────\n\n"
+                f"❤️ Likes Before: {likes_before}\n"
+                f"⚡ Likes Given: {likes_given}\n"
+                f"💚 Likes after: {likes_after}\n\n"
+                f"📊 Remaining Requests: {remaining}\n"
+                f"💰 Your Balance: {user_likes[user_id]}"
+            )
+
+            bot.edit_message_text(template, chat_id=call.message.chat.id, message_id=sent_msg.message_id)
+
+        except Exception as e:
+            bot.edit_message_text(f"❌ **API Error**\n`{str(e)}`",
+                chat_id=call.message.chat.id, message_id=sent_msg.message_id, parse_mode='Markdown')
+
 @bot.message_handler(content_types=['photo', 'video', 'video_note'])
 def get_file_id(message):
     if message.photo:
@@ -107,12 +156,11 @@ def get_file_id(message):
         file_id = message.video.file_id if message.video else message.video_note.file_id
         bot.reply_to(message, f"✅ Video File ID:\n`{file_id}`\n\nCopy → Paste in START_VIDEO_ID", parse_mode='Markdown')
 
-# ===== GET UID =====
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id) == 'waiting_uid')
 def get_uid(message):
     try:
         uid = int(message.text)
-        user_state[message.from_user.id] = {'step': 'waiting_region', 'uid': uid}
+        user_state[message.from_user.id] = {'uid': uid}
         markup = InlineKeyboardMarkup(row_width=4)
         markup.add(
             InlineKeyboardButton('BD', callback_data='region_BD'),
@@ -130,7 +178,6 @@ def get_uid(message):
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
-# ===== SCAN UID =====
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id) == 'scanning_uid')
 def scan_uid(message):
     try:
@@ -156,52 +203,5 @@ def scan_uid(message):
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
-# ===== GET REGION + SUCCESS FRAME =====
-@bot.callback_query_handler(func=lambda call: call.data.startswith('region_'))
-def get_region(call):
-    region_code = call.data.split('_')[1]
-    region = valid_regions[region_code]
-    uid = user_state[call.from_user.id]['uid']
-    user_state.pop(call.from_user.id, None)
-
-    sent_msg = bot.send_message(call.message.chat.id, "⏳ Processing...")
-    api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
-
-    try:
-        response = requests.get(api_url, timeout=15)
-        data = response.json()
-
-        name = data.get('PlayerNickname', 'N/A')
-        likes_before = data.get('LikesbeforeCommand', '0')
-        likes_given = data.get('LikesGivenByAPI', '0')
-        likes_after = data.get('LikesafterCommand', '0')
-        remaining = data.get('remains', 'N/A')
-
-        # Add likes to user balance
-        user_id = call.from_user.id
-        likes_given_int = int(likes_given) if str(likes_given).isdigit() else 0
-        user_likes[user_id] = user_likes.get(user_id, 0) + likes_given_int
-
-        template = (
-            "════════\n"
-            " 🎉 LIKE SUCCESSFULLY 👍 \n"
-            "════════\n\n"
-            f"👑 Name: {name}\n"
-            f"🆔 UID: {uid}\n"
-            f"🌐 Region: {region.upper()}\n"
-            "────────────────────────\n\n"
-            f"❤️ Likes Before: {likes_before}\n"
-            f"⚡ Likes Given: {likes_given}\n"
-            f"💚 Likes after: {likes_after}\n\n"
-            f"📊 Remaining Requests: {remaining}\n"
-            f"💰 Your Balance: {user_likes[user_id]}"
-        )
-
-        bot.edit_message_text(template, chat_id=call.message.chat.id, message_id=sent_msg.message_id)
-
-    except Exception as e:
-        bot.edit_message_text(f"❌ **Error Connection to API**\n`{str(e)}`",
-            chat_id=call.message.chat.id, message_id=sent_msg.message_id, parse_mode='Markdown')
-
-print("Årmstrøñg Bot AUT Clone with Personal Greeting is online...")
+print("Årmstrøñg Bot AUT Clone - Spin 5-20 + Region Fixed is online...")
 bot.infinity_polling()
