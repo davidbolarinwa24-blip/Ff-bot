@@ -5,7 +5,7 @@ import os
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 
 API_TOKEN = '8303316737:AAGptofHkHLlhvx6Q-18WSsx9fyoWVOx-Xs'
-START_VIDEO_ID = 'PASTE_VIDEO_FILE_ID_HERE'
+START_PHOTO_ID = 'PASTE_PHOTO_FILE_ID_HERE'  # Changed from VIDEO to PHOTO
 
 bot = telebot.TeleBot(API_TOKEN)
 user_state = {}
@@ -21,10 +21,9 @@ def save_data(data):
     with open('users.json', 'w') as f:
         json.dump(data, f)
 
-# ===== START WITH VIDEO + FRAME + MENU =====
+# ===== START WITH PHOTO + FRAME + MENU =====
 @bot.message_handler(commands=['start'])
 def start(message):
-    # 1. Inline keyboard "frame" under video - AUT bot style
     inline_markup = InlineKeyboardMarkup(row_width=2)
     btn1 = InlineKeyboardButton("🔥 Send Likes", callback_data="send_likes")
     btn2 = InlineKeyboardButton("🔍 Scan Info", callback_data="scan_info")
@@ -32,20 +31,19 @@ def start(message):
     btn4 = InlineKeyboardButton("❓ Help", callback_data="help")
     inline_markup.add(btn1, btn2, btn3, btn4)
     
-    # 2. Reply keyboard menu below
     menu_markup = ReplyKeyboardMarkup(resize_keyboard=True)
     menu_markup.row('❤️ Send Likes', '🔍 Scan Info')
     menu_markup.row('⬅️ Back to Home')
     
     caption = "⚡ | I'm Årmstrøñg, nice to see you!\n👍 | Balance: 0"
     
-    if START_VIDEO_ID != 'PASTE_VIDEO_FILE_ID_HERE':
-        bot.send_video(message.chat.id, START_VIDEO_ID, caption=caption, reply_markup=inline_markup)
+    # CHANGED: send_photo instead of send_video
+    if START_PHOTO_ID != 'PASTE_PHOTO_FILE_ID_HERE':
+        bot.send_photo(message.chat.id, START_PHOTO_ID, caption=caption, reply_markup=inline_markup)
         bot.send_message(message.chat.id, "📱 Menu:", reply_markup=menu_markup)
     else:
         bot.send_message(message.chat.id, caption, reply_markup=menu_markup)
 
-# ===== HANDLE INLINE BUTTON CLICKS =====
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
     bot.answer_callback_query(call.id)
@@ -68,19 +66,21 @@ def callback(call):
     elif call.data == "help":
         bot.send_message(call.message.chat.id, "❓ Contact admin: @your_username")
 
-# ===== FILE_ID GRABBER =====
-@bot.message_handler(content_types=['video', 'video_note'])
+# ===== FILE_ID GRABBER - NOW FOR PHOTOS TOO =====
+@bot.message_handler(content_types=['photo', 'video', 'video_note'])
 def get_file_id(message):
-    file_id = message.video.file_id if message.video else message.video_note.file_id
-    bot.reply_to(message, f"✅ File ID:\n`{file_id}`\n\nCopy → Paste in START_VIDEO_ID", parse_mode='Markdown')
+    if message.photo:
+        file_id = message.photo[-1].file_id  # Highest quality
+        bot.reply_to(message, f"✅ Photo File ID:\n`{file_id}`\n\nCopy → Paste in START_PHOTO_ID", parse_mode='Markdown')
+    else:
+        file_id = message.video.file_id if message.video else message.video_note.file_id
+        bot.reply_to(message, f"✅ Video File ID:\n`{file_id}`\n\nCopy → Paste in START_PHOTO_ID", parse_mode='Markdown')
 
-# ===== BACK BUTTON =====
 @bot.message_handler(func=lambda m: m.text == '⬅️ Back to Home')
 def back_home(message):
     user_state.pop(message.from_user.id, None)
     start(message)
 
-# ===== GET UID =====
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id) == 'waiting_uid')
 def get_uid(message):
     try:
@@ -94,7 +94,6 @@ def get_uid(message):
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
-# ===== GET REGION + EXACT SUCCESS FRAME FROM SCREENSHOT =====
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id, {}).get('step') == 'waiting_region')
 def get_region(message):
     if message.text not in valid_regions:
@@ -119,7 +118,6 @@ def get_region(message):
         likes_after = data.get('LikesafterCommand', '0')
         remaining = data.get('remains', 'N/A')
         
-        # ===== EXACT FRAME FROM YOUR SCREENSHOT LINES 37-49 =====
         template = (
             "════════\n"
             "  🎉 LIKE SUCCESSFULLY 👍  \n"
@@ -140,5 +138,5 @@ def get_region(message):
         bot.edit_message_text(f"❌ **Error Connection to API**\n`{str(e)}`", 
             chat_id=message.chat.id, message_id=sent_msg.message_id, parse_mode='Markdown')
 
-print("Årmstrøñg Bot v2.6.1 with FRAME is online...")
+print("Årmstrøñg Bot v2.6.1 with PHOTO is online...")
 bot.infinity_polling()
