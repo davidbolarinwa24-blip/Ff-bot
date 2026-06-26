@@ -1,24 +1,21 @@
-print("Årmstrøñg Bot v2.5 VALIDATION ACTIVE")
-
+import os
+import threading
 import telebot
 import requests
 import json
 import random
 from datetime import datetime
-import os
 import time
+from flask import Flask
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 
-API_TOKEN = '8303316737:AAGptofHkHLlhvx6Q-18WSsx9fyoWVOx-Xs'
+# ===== CONFIG =====
+API_TOKEN = os.environ.get('BOT_TOKEN', '8303316737:AAGptofHkHLlhvx6Q-18WSsx9fyoWVOx-Xs')
+START_VIDEO_ID = 'PASTE_VIDEO_FILE_ID_HERE' # Send video to bot, copy file_id from Railway logs
+WEB_URL = os.environ.get('WEB_URL', 'https://your-railway-app.up.railway.app')
+
 bot = telebot.TeleBot(API_TOKEN)
-
-bot.set_my_commands([
-    telebot.types.BotCommand("start", "Open main menu"),
-    telebot.types.BotCommand("ping", "Check bot speed"),
-    telebot.types.BotCommand("spin", "Daily bonus spin"),
-    telebot.types.BotCommand("balance", "Check bonus likes"),
-    telebot.types.BotCommand("help", "Contact admin"),
-    telebot.types.BotCommand("cancel", "Cancel process")
-])
+app = Flask(__name__)
 
 DATA_FILE = 'users.json'
 user_state = {}
@@ -38,47 +35,75 @@ def get_today():
     return datetime.now().strftime('%Y-%m-%d')
 
 def get_weighted_bonus():
-    if random.random() < 0.8:
-        return random.randint(1, 10)
-    else:
-        return random.randint(11, 50)
+    return random.randint(1, 10) if random.random() < 0.8 else random.randint(11, 50)
 
+# ===== START WITH VIDEO + FRAME/INLINE BUTTONS =====
 @bot.message_handler(commands=['start'])
 def start(message):
-    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row('❤️ Send Likes', '🔍 Scan Info')
-    markup.row('📦 Track Orders', '🏪 Open Store')
-    markup.row('🎁 Free Daily Spin & Referrals')
-    markup.row('📈 Level-Up UI', '👑 VIP Sniper')
-    markup.row('👤 Profile Visits', '⚙️ Settings')
+    menu_markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    menu_markup.row('❤️ Send Likes', '🔍 Scan Info')
+    menu_markup.row('📦 Track Orders', '🏪 Open Store')
+    menu_markup.row('🎁 Free Daily Spin & Referrals')
+    menu_markup.row('📈 Level-Up UI', '👑 VIP Sniper')
+    menu_markup.row('👤 Profile Visits', '⚙️ Settings')
     
-    bot.send_message(message.chat.id, 
+    inline_markup = InlineKeyboardMarkup(row_width=2)
+    btn1 = InlineKeyboardButton("🔥 Like Tool", web_app=telebot.types.WebAppInfo(url=WEB_URL))
+    btn2 = InlineKeyboardButton("📊 Stats", callback_data="stats")
+    btn3 = InlineKeyboardButton("💎 VIP", callback_data="vip")
+    btn4 = InlineKeyboardButton("❓ Help", callback_data="help")
+    inline_markup.add(btn1, btn2, btn3, btn4)
+    
+    caption = (
         "⚡ | Hi Årmstrõng, nice to see you!\n"
         "👍 | Balance: 0\n"
         "🚀 | LevelUP: ❌Inactive\n"
         "⭐ Active Subscriptions ✨\n"
-        "❌ No active subscriptions. Tap Open Store to upgrade!",
-        reply_markup=markup
+        "❌ No active subscriptions. Tap Open Store to upgrade!"
+    )
+    
+    if START_VIDEO_ID != 'PASTE_VIDEO_FILE_ID_HERE':
+        bot.send_video(message.chat.id, START_VIDEO_ID, caption=caption, reply_markup=inline_markup)
+        bot.send_message(message.chat.id, "📱 Menu:", reply_markup=menu_markup)
+    else:
+        bot.send_message(message.chat.id, caption, reply_markup=menu_markup)
+
+# ===== HANDLE INLINE BUTTONS =====
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
+    bot.answer_callback_query(call.id)
+    if call.data == "stats":
+        bot.send_message(call.message.chat.id, "📊 Stats panel coming soon...")
+    elif call.data == "vip":
+        bot.send_message(call.message.chat.id, "💎 VIP access coming soon...")
+    elif call.data == "help":
+        bot.send_message(call.message.chat.id, "❓ Contact admin: @your_username")
+
+# ===== FILE_ID GRABBER - DELETE AFTER YOU GET ID =====
+@bot.message_handler(content_types=['video', 'video_note'])
+def get_file_id(message):
+    file_id = message.video.file_id if message.video else message.video_note.file_id
+    vid_type = "Video" if message.video else "Video Note"
+    bot.reply_to(message, 
+        f"✅ {vid_type} File ID:\n\n`{file_id}`\n\nCopy → Paste in START_VIDEO_ID → Delete this handler",
+        parse_mode='Markdown'
     )
 
+# ===== YOUR EXISTING HANDLERS =====
 @bot.message_handler(func=lambda m: m.text == '❤️ Send Likes')
 def send_likes_btn(message):
     user_state[message.from_user.id] = 'waiting_uid'
     bot.send_message(message.chat.id, 
-        "⚡ SEND LIKES\n"
-        "─────────────────\n"
-        "Please type the UID you want to send likes to in the chat:",
-        reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home')
+        "⚡ SEND LIKES\n─────────────────\nPlease type the UID:",
+        reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home')
     )
 
 @bot.message_handler(func=lambda m: m.text == '🔍 Scan Info')
 def scan_info_btn(message):
     user_state[message.from_user.id] = 'scanning_uid'
     bot.send_message(message.chat.id, 
-        "🔍 PROFILE SCANNER\n"
-        "─────────────────\n"
-        "Please type the UID you want to scan in the chat:",
-        reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home')
+        "🔍 PROFILE SCANNER\n─────────────────\nPlease type the UID:",
+        reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home')
     )
 
 @bot.message_handler(func=lambda m: m.text == '⬅️ Back to Home')
@@ -92,18 +117,11 @@ def get_uid(message):
         uid = int(message.text)
         if uid <= 0: raise ValueError
         user_state[message.from_user.id] = {'step': 'waiting_region', 'uid': uid, 'type': 'likes'}
-        
-        # Region selection buttons
-        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.row('BD', 'IND', 'ME')
         markup.row('PK', 'US', 'SG')
         markup.row('⬅️ Back to Home')
-        
-        bot.send_message(message.chat.id,
-            f"🎯 Target Locked: {uid}\n\n"
-            f"Select server region:",
-            reply_markup=markup
-        )
+        bot.send_message(message.chat.id, f"🎯 Target Locked: {uid}\n\nSelect server region:", reply_markup=markup)
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
@@ -113,17 +131,11 @@ def scan_uid_step(message):
         uid = int(message.text)
         if uid <= 0: raise ValueError
         user_state[message.from_user.id] = {'step': 'waiting_region', 'uid': uid, 'type': 'scan'}
-        
-        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+        markup = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         markup.row('BD', 'IND', 'ME')
         markup.row('PK', 'US', 'SG')
         markup.row('⬅️ Back to Home')
-        
-        bot.send_message(message.chat.id,
-            f"🔍 UID: {uid}\n\n"
-            f"Select server region to scan:",
-            reply_markup=markup
-        )
+        bot.send_message(message.chat.id, f"🔍 UID: {uid}\n\nSelect server region to scan:", reply_markup=markup)
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
@@ -132,91 +144,36 @@ def get_region(message):
     if message.text not in valid_regions:
         bot.send_message(message.chat.id, "❌ Invalid region. Choose BD/IND/ME/PK/US/SG/ID/TH/VN/BR")
         return
-    
     data = user_state[message.from_user.id]
     uid = data['uid']
     region = valid_regions[message.text]
-    
     if data['type'] == 'scan':
         user_state.pop(message.from_user.id, None)
         scan_profile(message.chat.id, uid, region)
     else:
         user_state[message.from_user.id] = {'step': 'waiting_amount', 'uid': uid, 'region': region}
-        bot.send_message(message.chat.id,
-            f"🌍 Region: {message.text}\n\n"
-            f"How many likes do you want to send? (Type a number, or type 0 for MAX)",
-            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home')
-        )
+        bot.send_message(message.chat.id, f"🌍 Region: {message.text}\n\nHow many likes? Type 0 for MAX", reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home'))
 
 def scan_profile(chat_id, uid, region):
     loading_msg = bot.send_message(chat_id, "🔍 Scanning profile...")
     api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
-
     try:
         response = requests.get(api_url, timeout=15)
         response.raise_for_status()
         data = response.json()
-
         basic = data.get("basicInfo", {})
-        guild = data.get("guildInfo", {})
-        ranking = data.get("rankingInfo", {})
-        pet = data.get("petInfo", {})
-        credit = data.get("creditScoreInfo", {})
-
-        template = (
-            f"🔍 **PROFILE SCANNER** [{region.upper()}]\n\n"
-            f"🛡️ **Account Status**\n"
-            f"Status: 🟢 ACTIVE\n"
-            f"Region: {region.upper()}\n"
-            f"Last Login: {basic.get('lastLogin', 'N/A')}\n\n"
-            f"👤 **Basic Information**\n"
-            f"Nickname: {basic.get('nickname', 'N/A')}\n"
-            f"Level: {basic.get('level', 'N/A')}\n"
-            f"Rank: {basic.get('rank', 'N/A')}\n"
-            f"Max Rank: {basic.get('maxRank', 'N/A')}\n"
-            f"Experience: {basic.get('exp', 'N/A')}\n"
-            f"Liked: {basic.get('liked', 'N/A')}\n"
-            f"Account ID: {uid}\n"
-            f"Account Created: {basic.get('createdAt', 'N/A')}\n\n"
-            f"🏆 **Guild Information**\n"
-            f"Guild Name: {guild.get('name', 'None')}\n"
-            f"Guild Level: {guild.get('level', 'N/A')}\n"
-            f"Guild ID: {guild.get('id', 'N/A')}\n"
-            f"Members: {guild.get('members', '0/40')}\n\n"
-            f"🏅 **Ranking Information**\n"
-            f"BR Rank: {ranking.get('brRank', 'N/A')}\n"
-            f"BR Points: {ranking.get('brPoints', 'N/A')}\n"
-            f"CS Rank: {ranking.get('csRank', 'N/A')}\n"
-            f"CS Points: {ranking.get('csPoints', 'N/A')}\n\n"
-            f"⭐ **Pet Information**\n"
-            f"Pet Name: {pet.get('name', 'None')}\n"
-            f"Pet Level: {pet.get('level', 'N/A')}\n"
-            f"Pet Experience: {pet.get('exp', 'N/A')}\n\n"
-            f"💳 **Credit Score**\n"
-            f"Credit Score: {credit.get('score', '100')}"
-        )
-
+        template = f"🔍 **PROFILE SCANNER** [{region.upper()}]\n\n🛡️ Status: 🟢 ACTIVE\n👤 Nickname: {basic.get('nickname', 'N/A')}\nLevel: {basic.get('level', 'N/A')}"
         bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
-        bot.send_message(chat_id, template,
-            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'), parse_mode='Markdown')
-
-    except Exception as e:
+        bot.send_message(chat_id, template, parse_mode='Markdown', reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home'))
+    except:
         bot.delete_message(chat_id=chat_id, message_id=loading_msg.message_id)
-        bot.send_message(chat_id, 
-            f"❌ Scan Failed\n"
-            f"🔧 Possible reasons:\n"
-            f"1. API server down\n"
-            f"2. Wrong region - try BD/IND\n"
-            f"3. UID not found\n"
-            f"Try another region",
-            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'))
+        bot.send_message(chat_id, "❌ Scan Failed", reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home'))
 
 @bot.message_handler(func=lambda m: user_state.get(m.from_user.id, {}).get('step') == 'waiting_amount')
 def get_amount(message):
     data = user_state[message.from_user.id]
     uid = data['uid']
     region = data['region']
-    
     try:
         amount = int(message.text)
         if amount < 0: raise ValueError
@@ -224,112 +181,74 @@ def get_amount(message):
     except:
         bot.send_message(message.chat.id, "❌ Invalid amount. Send numbers only.")
         return
-
     user_state.pop(message.from_user.id, None)
-    loading_msg = bot.send_message(message.chat.id, "⏳ Processing your request...")
-
+    loading_msg = bot.send_message(message.chat.id, "⏳ Processing...")
     api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
-
     try:
         response = requests.get(api_url, timeout=15)
         response.raise_for_status()
         api_data = response.json()
-
         basic_info = api_data.get("basicInfo", {})
         name = basic_info.get("nickname", 'N/A')
         new_likes = basic_info.get("liked", 0)
         likes_before = api_data.get('LikesbeforeCommand', '0')
-        likes_given = amount
         level = basic_info.get("level", '52')
-
-        template = (
-            f"Årmstrõng Bot v2.5 🍀\n\n"
-            f"Player: #{name}#\n"
-            f"UID: {uid}\n"
-            f"Level: {level}\n"
-            f"Region: {region.upper()}\n\n"
-            f"Likes Before: {likes_before}\n"
-            f"Likes After: {new_likes}\n"
-            f"Likes Given: {likes_given}\n\n"
-            f"Status: ✅ Success"
-        )
-
+        template = f"Årmstrõng Bot v2.6.1 🍀\n\nPlayer: #{name}#\nUID: {uid}\nLevel: {level}\nRegion: {region.upper()}\n\nLikes Before: {likes_before}\nLikes After: {new_likes}\nLikes Given: {amount}\n\nStatus: ✅ Success"
         bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
-        bot.send_message(message.chat.id, template,
-            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'))
-
-    except Exception as e:
+        bot.send_message(message.chat.id, template, reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home'))
+    except:
         bot.delete_message(chat_id=message.chat.id, message_id=loading_msg.message_id)
-        bot.send_message(message.chat.id, 
-            "❌ API Error: Server is down\n"
-            "🔧 Possible reasons:\n"
-            "1. API limit reached\n"
-            "2. Wrong region - try BD/IND server\n"
-            "3. UID blocked\n"
-            "Try again later or contact admin",
-            reply_markup=telebot.types.ReplyKeyboardMarkup().add('⬅️ Back to Home'))
+        bot.send_message(message.chat.id, "❌ API Error: Server is down", reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home'))
 
 @bot.message_handler(commands=['ping'])
 def ping(message):
     start_time = time.perf_counter_ns()
     sent_msg = bot.send_message(message.chat.id, "🏓 Pong!")
     end_time = time.perf_counter_ns()
-    
-    response_time_ns = end_time - start_time
-    response_time_ms = response_time_ns / 1_000_000
-    
-    bot.edit_message_text(
-        f"🏓 Pong!\n\n⚡ Response time: `{response_time_ns}` ns\n📊 Speed: `{response_time_ms:.2f}` ms",
-        chat_id=message.chat.id, message_id=sent_msg.message_id, parse_mode='Markdown'
-    )
+    response_time_ms = (end_time - start_time) / 1_000_000
+    bot.edit_message_text(f"🏓 Pong!\n\n⚡ Response time: `{response_time_ms:.2f}` ms", chat_id=message.chat.id, message_id=sent_msg.message_id, parse_mode='Markdown')
 
 @bot.message_handler(commands=['balance'])
 def balance(message):
     data = load_data()
     user_id = str(message.from_user.id)
     bonus = data.get(user_id, {}).get('bonus_likes', 0)
-    bot.send_message(message.chat.id, f"👍 | Balance: {bonus}\n⭐ Check Balance And Whitelist Sub🍀")
+    bot.send_message(message.chat.id, f"👍 | Balance: {bonus}")
 
 @bot.message_handler(commands=['spin'])
 def spin_wheel(message):
     user_id = str(message.from_user.id)
     data = load_data()
     today = get_today()
-
     if user_id in data and data[user_id].get('spin_date') == today:
-        bot.send_message(message.chat.id, "❌ Already spun today!\nCome back tomorrow for another spin 🎰")
+        bot.send_message(message.chat.id, "❌ Already spun today!")
         return
-
     bonus = get_weighted_bonus()
     if user_id not in data: data[user_id] = {}
-
     data[user_id]['spin_date'] = today
     data[user_id]['bonus_likes'] = data[user_id].get('bonus_likes', 0) + bonus
     save_data(data)
-
-    wheel = ["🎰", "🎲", "🎯", "🍀", "⭐", "💎", "🔒"]
-    spin_msg = bot.send_message(message.chat.id, f"{random.choice(wheel)} Spinning daily wheel...")
-    time.sleep(2)
-
-    rarity = "🔓 COMMON" if bonus <= 10 else "🔒 RARE/LOCKED"
-    bot.edit_message_text(
-        f"{random.choice(wheel)} **SPIN WHEEL RESULT!** {random.choice(wheel)}\n\n"
-        f"🎉 You won: **{bonus} Bonus Likes!**\n"
-        f"Rarity: {rarity}\n"
-        f"💚 Total Bonus: {data[user_id]['bonus_likes']}\n\n"
-        f"Come back tomorrow for another spin!",
-        chat_id=message.chat.id, message_id=spin_msg.message_id, parse_mode='Markdown'
-    )
+    bot.send_message(message.chat.id, f"🎉 You won: **{bonus} Bonus Likes!**\n💚 Total Bonus: {data[user_id]['bonus_likes']}", parse_mode='Markdown')
 
 @bot.message_handler(commands=['help'])
 def help_cmd(message):
-    bot.send_message(message.chat.id, "📞 Contact An Admin ✅\nDM @your_username for support")
+    bot.send_message(message.chat.id, "📞 Contact An Admin ✅")
 
 @bot.message_handler(commands=['cancel'])
 def cancel(message):
     user_state.pop(message.from_user.id, None)
-    bot.send_message(message.chat.id, "❌ Cancelled Background Process 🔴", reply_markup=telebot.types.ReplyKeyboardRemove())
+    bot.send_message(message.chat.id, "❌ Cancelled", reply_markup=ReplyKeyboardMarkup().add('⬅️ Back to Home'))
     start(message)
 
-print("Årmstrøñg Bot v2.5 is now online...")
-bot.infinity_polling()
+# ===== FLASK FOR RAILWAY =====
+@app.route('/')
+def home():
+    return "Årmstrøñg Bot v2.6.1 + API Running ✅"
+
+def run_bot():
+    bot.infinity_polling()
+
+if __name__ == '__main__':
+    print("Årmstrøñg Bot v2.6.1 FILE_ID GRABBER ACTIVE")
+    threading.Thread(target=run_bot, daemon=True).start()
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
