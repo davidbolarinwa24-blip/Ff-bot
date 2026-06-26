@@ -5,7 +5,7 @@ import os
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 
 API_TOKEN = '8303316737:AAGptofHkHLlhvx6Q-18WSsx9fyoWVOx-Xs'
-START_PHOTO_ID = 'PASTE_PHOTO_FILE_ID_HERE'  # Changed from VIDEO to PHOTO
+START_PHOTO_ID = 'AgACAgQAAxkBAAIBFGo-ureHxrSmHPvpyvfhXS8aMC4GAAKSDmsbsAAB-VF47IxC27I5PwEAAwIAA3gAAzwE'  # Changed from VIDEO to PHOTO
 
 bot = telebot.TeleBot(API_TOKEN)
 user_state = {}
