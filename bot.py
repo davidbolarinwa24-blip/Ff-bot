@@ -60,7 +60,6 @@ def start(message):
     menu_markup.row('☰ Menu')
     bot.send_message(message.chat.id, "Menu", reply_markup=menu_markup)
 
-# ===== SINGLE CALLBACK HANDLER =====
 @bot.callback_query_handler(func=lambda call: True)
 def callback(call):
     bot.answer_callback_query(call.id)
@@ -75,7 +74,6 @@ def callback(call):
         bot.send_message(call.message.chat.id, "🔍 PROFILE SCANNER\n─────────────────\nPlease type the UID:")
 
     elif call.data == "spin":
-        # DAILY SPIN: MIN 5, MAX 20 LIKES ✅
         spin_likes = random.randint(5, 20)
         user_likes[user_id] = user_likes.get(user_id, 0) + spin_likes
         bot.send_message(call.message.chat.id, f"🎁 Daily Spin: You got {spin_likes} likes! New balance: {user_likes[user_id]}")
@@ -93,7 +91,6 @@ def callback(call):
     elif call.data == "settings":
         bot.send_message(call.message.chat.id, "⚙️ Settings panel coming soon...")
 
-    # REGION HANDLER - FIXED
     elif call.data.startswith('region_'):
         region_code = call.data.split('_')[1]
 
@@ -111,7 +108,8 @@ def callback(call):
         user_state.pop(user_id, None)
 
         sent_msg = bot.send_message(call.message.chat.id, "⏳ Processing...")
-        api_url = f"https://najmi-ob53-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
+        # UPDATED API: ob53 → ob54
+        api_url = f"https://najmi-ob54-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
 
         try:
             response = requests.get(api_url, timeout=15)
@@ -203,5 +201,5 @@ def scan_uid(message):
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
-print("Årmstrøñg Bot AUT Clone - Spin 5-20 + Region Fixed is online...")
+print("Årmstrøñg Bot - ob54 API + No Force Join + Spin 5-20...")
 bot.infinity_polling()
