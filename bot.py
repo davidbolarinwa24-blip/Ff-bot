@@ -78,18 +78,16 @@ def callback(call):
         user_likes[user_id] = user_likes.get(user_id, 0) + spin_likes
         bot.send_message(call.message.chat.id, f"🎁 Daily Spin: You got {spin_likes} likes! New balance: {user_likes[user_id]}")
 
-    elif call.data == "orders":
-        bot.send_message(call.message.chat.id, "📦 Track Orders panel coming soon...")
-    elif call.data == "store":
-        bot.send_message(call.message.chat.id, "🛒 Store panel coming soon...")
-    elif call.data == "levelup":
-        bot.send_message(call.message.chat.id, "🎯 Level-Up UI panel coming soon...")
-    elif call.data == "sniper":
-        bot.send_message(call.message.chat.id, "🎯 VIP Sniper panel coming soon...")
-    elif call.data == "visits":
-        bot.send_message(call.message.chat.id, "👥 Profile Visits panel coming soon...")
-    elif call.data == "settings":
-        bot.send_message(call.message.chat.id, "⚙️ Settings panel coming soon...")
+    elif call.data in ["orders", "store", "levelup", "sniper", "visits", "settings"]:
+        panels = {
+            "orders": "📦 Track Orders panel coming soon...",
+            "store": "🛒 Store panel coming soon...",
+            "levelup": "🎯 Level-Up UI panel coming soon...",
+            "sniper": "🎯 VIP Sniper panel coming soon...",
+            "visits": "👥 Profile Visits panel coming soon...",
+            "settings": "⚙️ Settings panel coming soon..."
+        }
+        bot.send_message(call.message.chat.id, panels[call.data])
 
     elif call.data.startswith('region_'):
         region_code = call.data.split('_')[1]
@@ -108,8 +106,9 @@ def callback(call):
         user_state.pop(user_id, None)
 
         sent_msg = bot.send_message(call.message.chat.id, "⏳ Processing...")
-        # UPDATED API: ob53 → ob54
-        api_url = f"https://najmi-ob54-like-api-vvkb.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
+
+        # FIXED API URL - YOUR NEW VERCEL LINK
+        api_url = f"https://free-fire-api-eta.vercel.app/like?uid={uid}&server_name={region}&key=NJM"
 
         try:
             response = requests.get(api_url, timeout=15)
@@ -201,5 +200,5 @@ def scan_uid(message):
     except:
         bot.send_message(message.chat.id, "❌ Invalid UID. Send numbers only.")
 
-print("Årmstrøñg Bot - ob54 API + No Force Join + Spin 5-20...")
+print("Årmstrøñg Bot AUT Style - Spin 5-20 + Region Fixed is online...")
 bot.infinity_polling()
